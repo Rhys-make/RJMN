@@ -1,0 +1,52 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+myenv/
+resume_jd_matcher/.venv/
+resume_jd_matcher/venv/
+resume_jd_matcher/env/
+resume_jd_matcher/myenv/
+
+# Streamlit local files
+.streamlit/
+resume_jd_matcher/.streamlit/
+
+# Local model files and large ML weights
+models/
+resume_jd_matcher/models/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
+
+# Hugging Face / model cache leftovers
+.cache/
+huggingface/
+
+# Logs and generated reports
+*.log
+resume_jd_match_report*.json
+resume_jd_match_report*.md
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
