@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_PYTHON = ROOT / "myenv310" / "Scripts" / "python.exe"
+if PROJECT_PYTHON.exists() and Path(sys.executable).resolve() != PROJECT_PYTHON.resolve():
+    os.execv(str(PROJECT_PYTHON), [str(PROJECT_PYTHON), *sys.argv])
+
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
