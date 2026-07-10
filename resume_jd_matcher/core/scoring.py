@@ -56,10 +56,14 @@ def _best_evidence_average(evidence_matches: list[dict[str, Any]]) -> float:
     return _clip_score(sum(scores) / len(scores) * 100)
 
 
-def _project_experience_score(resume_sections: dict[str, list[str]], jd_text: str) -> float:
+def _project_experience_score(resume_sections: dict[str, list[str]], jd_text: str, resume_text: str = "") -> float:
     project_text = "\n".join(resume_sections.get("项目经历", []) + resume_sections.get("实习经历", []))
     if not project_text.strip():
-        return 40.0
+        project_like_terms = ("项目", "实习", "负责", "参与", "完成", "构建", "开发", "评估", "处理")
+        if any(term in str(resume_text) for term in project_like_terms):
+            project_text = resume_text
+        else:
+            return 40.0
 
     similarity, _ = semantic_similarity_pair(project_text, jd_text)
     project_clean = clean_text(project_text).replace(" ", "")
@@ -91,18 +95,19 @@ def calculate_scores(
 
     skill_entity_score = _ratio_score(hard_jd_skills, hard_matched_skills)
     semantic_evidence_score = _best_evidence_average(evidence_matches)
-    project_score = _project_experience_score(resume_sections, jd_text)
+    project_score = _project_experience_score(resume_sections, jd_text, resume_text)
 
     soft_jd = skill_result.get("jd_skills_by_category", {}).get("软技能", [])
     soft_matched = skill_result.get("matched_skills_by_category", {}).get("软技能", [])
     soft_score = _ratio_score(soft_jd, soft_matched)
 
-    total_score = _clip_score(
+    weighted_total = (
         skill_entity_score * 0.30
         + semantic_evidence_score * 0.40
         + project_score * 0.20
         + soft_score * 0.10
     )
+    total_score = _clip_score(round(weighted_total))
 
     return {
         "total_score": total_score,
@@ -114,4 +119,3 @@ def calculate_scores(
             "软技能匹配": soft_score,
         },
     }
-

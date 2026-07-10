@@ -167,16 +167,99 @@ JSON 结构必须为：
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:
+    text = str(text or "").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", text, flags=re.S)
-        if not match:
-            return None
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
+        pass
+
+    start = text.find("{")
+    if start < 0:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index, char in enumerate(text[start:], start=start):
+        if escape:
+            escape = False
+            continue
+        if char == "\\":
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start : index + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def _ensure_list(value: Any, fallback: list[Any], limit: int = 5, min_count: int = 3) -> list[Any]:
+    if isinstance(value, list):
+        items = [item for item in value if item]
+        if items:
+            for item in fallback:
+                if len(items) >= min_count:
+                    break
+                if item not in items:
+                    items.append(item)
+            return items[:limit]
+    if isinstance(value, str) and value.strip():
+        pieces = [piece.strip(" -；;。") for piece in re.split(r"[\n；;]", value) if piece.strip()]
+        items = pieces if pieces else [value.strip()]
+        for item in fallback:
+            if len(items) >= min_count:
+                break
+            if item not in items:
+                items.append(item)
+        return items[:limit]
+    return fallback[:limit]
+
+
+def _normalize_analysis_result(
+    parsed: dict[str, Any],
+    scoring_result: dict[str, Any],
+    skill_result: dict[str, Any],
+    evidence_result: list[dict[str, Any]],
+) -> dict[str, Any]:
+    fallback = template_fallback_analysis(scoring_result, skill_result, evidence_result)
+    interview_items = parsed.get("interview_questions", [])
+    normalized_questions: list[dict[str, str]] = []
+    if isinstance(interview_items, list):
+        for item in interview_items:
+            if isinstance(item, dict):
+                normalized_questions.append(
+                    {
+                        "type": str(item.get("type") or "面试问题"),
+                        "question": str(item.get("question") or ""),
+                        "answer_hint": str(item.get("answer_hint") or item.get("answer") or ""),
+                    }
+                )
+            elif isinstance(item, str):
+                normalized_questions.append({"type": "面试问题", "question": item, "answer_hint": "结合简历证据和岗位要求作答。"})
+    normalized_questions = [item for item in normalized_questions if item["question"]]
+    if not normalized_questions:
+        normalized_questions = fallback["interview_questions"]
+
+    return {
+        "strengths": _ensure_list(parsed.get("strengths"), fallback["strengths"], min_count=3),
+        "weaknesses": _ensure_list(parsed.get("weaknesses"), fallback["weaknesses"], min_count=3),
+        "resume_suggestions": _ensure_list(parsed.get("resume_suggestions"), fallback["resume_suggestions"], min_count=4),
+        "interview_questions": normalized_questions[:5],
+        "final_advice": str(parsed.get("final_advice") or fallback["final_advice"]),
+    }
 
 
 def template_fallback_analysis(
@@ -255,30 +338,48 @@ def generate_analysis(
     prompt = _build_prompt(resume_text, jd_text, scoring_result, skill_result, evidence_result)
     try:
         tokenizer, model, torch, device = _load_generation_model()
-        messages = [
-            {"role": "system", "content": "你是严谨的中文 NLP 课程设计分析助手。"},
-            {"role": "user", "content": prompt},
-        ]
-        if hasattr(tokenizer, "apply_chat_template"):
-            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        else:
-            text = prompt
-        inputs = tokenizer(text, return_tensors="pt").to(device)
+
+        def _generate_once(user_prompt: str, max_tokens: int) -> str:
+            messages = [
+                {"role": "system", "content": "你是严谨的中文 NLP 课程设计分析助手，只输出合法 JSON。"},
+                {"role": "user", "content": user_prompt},
+            ]
+            if hasattr(tokenizer, "apply_chat_template"):
+                text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            else:
+                text = user_prompt
+            inputs = tokenizer(text, return_tensors="pt").to(device)
+            with torch.no_grad():
+                output_ids = model.generate(
+                    **inputs,
+                    max_new_tokens=max_tokens,
+                    do_sample=False,
+                    temperature=None,
+                    top_p=None,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
+            generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
+            return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+
         max_new_tokens = min(GENERATION_MAX_NEW_TOKENS, 512 if device == "cpu" else GENERATION_MAX_NEW_TOKENS)
-        with torch.no_grad():
-            output_ids = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=tokenizer.eos_token_id,
-            )
-        generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
-        raw_text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        raw_text = _generate_once(prompt, max_new_tokens)
         parsed = _parse_json(raw_text)
         if not parsed:
-            fallback = template_fallback_analysis(scoring_result, skill_result, evidence_result, "Qwen 输出不是合法 JSON，已使用模板降级。")
-            fallback["raw_text"] = raw_text
-            return fallback
+            repair_prompt = (
+                "把下面文本整理为严格 JSON，只保留 strengths、weaknesses、resume_suggestions、"
+                "interview_questions、final_advice 五个字段，不要输出 Markdown。\n"
+                f"原始文本：\n{raw_text[:1800]}"
+            )
+            repaired_text = _generate_once(repair_prompt, 256)
+            parsed = _parse_json(repaired_text)
+            raw_text = raw_text + "\n\n[JSON_REPAIR_OUTPUT]\n" + repaired_text
+
+        if parsed:
+            parsed = _normalize_analysis_result(parsed, scoring_result, skill_result, evidence_result)
+        else:
+            parsed = template_fallback_analysis(scoring_result, skill_result, evidence_result)
+            parsed["warning"] = "Qwen 输出不是合法 JSON，已使用结构化修复结果。"
+
         parsed.update(
             {
                 "generation_mode": "qwen2.5-1.5b-instruct",
