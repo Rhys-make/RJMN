@@ -14,6 +14,21 @@ from .preprocess import clean_text, tokenize_text
 
 DEFAULT_SKILL_DICT_PATH = Path(__file__).resolve().parents[1] / "data" / "skill_dict.json"
 
+SKILL_ALIASES = {
+    "SQL": ["mysql", "postgresql", "数据库查询", "数据库设计"],
+    "自然语言处理": ["nlp", "文本处理", "语言处理", "意图识别"],
+    "NLP": ["自然语言处理", "文本处理", "语言处理", "意图识别"],
+    "文本分类": ["意图识别", "分类效果", "分类实验", "短文本分类"],
+    "关键词提取": ["关键词抽取", "关键短语提取"],
+    "语义匹配": ["相似句检索", "相似文本检索", "语义相似", "相似度匹配"],
+    "向量检索": ["向量化表示", "相似句检索", "向量召回", "语义检索"],
+    "模型评估": ["评估分类效果", "实验评估", "结果分析", "评估指标"],
+    "数据清洗": ["清洗用户反馈语料", "清洗语料", "清洗文本", "数据预处理"],
+    "文档撰写": ["文档", "实验记录", "报告撰写"],
+    "沟通能力": ["沟通", "沟通需求", "沟通协作", "团队协作"],
+    "团队协作": ["团队沟通", "沟通协作", "协作"],
+}
+
 
 def load_skill_dict(skill_dict_path: str | Path | None = None) -> dict[str, list[str]]:
     path = Path(skill_dict_path) if skill_dict_path else DEFAULT_SKILL_DICT_PATH
@@ -26,6 +41,11 @@ def _contains_chinese(text: str) -> bool:
 
 
 def _contains_skill(text: str, skill: str) -> bool:
+    candidates = [skill, *SKILL_ALIASES.get(skill, [])]
+    return any(_contains_skill_literal(text, candidate) for candidate in candidates)
+
+
+def _contains_skill_literal(text: str, skill: str) -> bool:
     cleaned_text = clean_text(text)
     skill_text = clean_text(skill)
     if not cleaned_text or not skill_text:
@@ -139,4 +159,3 @@ def extract_keywords(
         "keywords_by_category": category_detail,
         "tfidf_keywords": _tfidf_keywords_for_docs(resume_text, jd_text),
     }
-

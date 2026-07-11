@@ -1,4 +1,4 @@
-"""Pretrained semantic embedding model based on sentence-transformers."""
+"""Pretrained semantic embedding model based on BGE."""
 
 from __future__ import annotations
 
@@ -33,15 +33,19 @@ class EmbeddingModel:
         self.model_name = model_name
         self.backend = "sentence-transformers"
         self.model = None
+        self.tokenizer = None
+        self.torch = None
+        self.device = "cpu"
         self.error = ""
         self.available = False
         self._load()
 
     def _load(self) -> None:
+        project_local_dir = _usable_local_model_dir(EMBEDDING_MODEL_LOCAL_PATH)
+        source = str(project_local_dir) if project_local_dir else self.model_name
         try:
             from sentence_transformers import SentenceTransformer
 
-            project_local_dir = _usable_local_model_dir(EMBEDDING_MODEL_LOCAL_PATH)
             if project_local_dir:
                 self.model = SentenceTransformer(str(project_local_dir), local_files_only=True)
                 self.load_mode = f"project_local:{project_local_dir}"
@@ -55,15 +59,48 @@ class EmbeddingModel:
             self.available = True
             self.error = ""
         except Exception as exc:  # noqa: BLE001 - expose model errors to UI without crashing.
-            self.model = None
-            self.available = False
-            self.error = f"预训练语义模型 {self.model_name} 加载失败：{exc}"
+            sentence_transformers_error = exc
+            try:
+                import torch
+                from transformers import AutoModel, AutoTokenizer
+
+                self.tokenizer = AutoTokenizer.from_pretrained(source, local_files_only=bool(project_local_dir))
+                self.model = AutoModel.from_pretrained(source, local_files_only=bool(project_local_dir))
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+                self.model.to(self.device)
+                self.model.eval()
+                self.torch = torch
+                self.backend = "transformers-mean-pooling"
+                self.load_mode = f"project_local:{project_local_dir}" if project_local_dir else "huggingface_cache"
+                self.available = True
+                self.error = ""
+            except Exception as fallback_exc:  # noqa: BLE001
+                self.model = None
+                self.available = False
+                self.error = (
+                    f"预训练语义模型 {self.model_name} 加载失败："
+                    f"sentence-transformers={sentence_transformers_error}; transformers={fallback_exc}"
+                )
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
         if not self.available or self.model is None:
             raise RuntimeError(self.error or "预训练语义模型不可用")
         cleaned = [str(text or "").strip() for text in texts]
-        embeddings = self.model.encode(cleaned, normalize_embeddings=True, convert_to_numpy=True)
+        if self.backend == "sentence-transformers":
+            embeddings = self.model.encode(cleaned, normalize_embeddings=True, convert_to_numpy=True)
+            return np.asarray(embeddings, dtype=float)
+
+        if self.tokenizer is None or self.torch is None:
+            raise RuntimeError("transformers BGE 后端未正确初始化")
+        encoded = self.tokenizer(cleaned, padding=True, truncation=True, return_tensors="pt")
+        encoded = {key: value.to(self.device) for key, value in encoded.items()}
+        with self.torch.no_grad():
+            output = self.model(**encoded)
+            token_embeddings = output.last_hidden_state
+            attention_mask = encoded["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
+            pooled = (token_embeddings * attention_mask).sum(dim=1) / attention_mask.sum(dim=1).clamp(min=1e-9)
+            pooled = self.torch.nn.functional.normalize(pooled, p=2, dim=1)
+            embeddings = pooled.cpu().numpy()
         return np.asarray(embeddings, dtype=float)
 
     def compute_cosine_similarity(self, a, b) -> np.ndarray:
