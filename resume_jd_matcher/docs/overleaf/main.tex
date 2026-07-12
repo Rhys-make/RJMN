@@ -1,0 +1,828 @@
+\documentclass[UTF8,zihao=-4,a4paper,oneside]{ctexrep}
+
+% Overleaf 编译器请选择 XeLaTeX。
+\usepackage[a4paper,left=2.8cm,right=2.6cm,top=2.6cm,bottom=2.6cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs,tabularx,array,longtable,multirow}
+\usepackage{graphicx,float,caption,subcaption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{microtype}
+
+\definecolor{linkblue}{RGB}{32,86,148}
+\definecolor{codegray}{RGB}{246,248,250}
+\definecolor{framegray}{RGB}{160,168,176}
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=linkblue,urlcolor=linkblue}
+\urlstyle{same}
+\setstretch{1.45}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0pt}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+\renewcommand{\thefigure}{\thechapter-\arabic{figure}}
+\renewcommand{\thetable}{\thechapter-\arabic{table}}
+\renewcommand{\theequation}{\thechapter-\arabic{equation}}
+\renewcommand{\arraystretch}{1.35}
+\captionsetup{font=small,labelsep=quad}
+\titleformat{\chapter}{\centering\heiti\zihao{3}}{第\chinese{chapter}章}{1em}{}
+\titleformat{\section}{\heiti\zihao{4}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\heiti\zihao{-4}}{\thesubsection}{0.8em}{}
+\titlespacing*{\chapter}{0pt}{-12pt}{24pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small 基于预训练语言模型的简历岗位匹配度评估与面试辅助系统}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codegray},
+  frame=single,
+  rulecolor=\color{framegray},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=1em,
+  xrightmargin=1em
+}
+
+% 封面信息：只需修改下面五项。
+\newcommand{\coursename}{【待填写】}
+\newcommand{\collegeclass}{【待填写】}
+\newcommand{\studentinfo}{【待填写】}
+\newcommand{\advisorname}{【待填写】}
+\newcommand{\finishdate}{【待填写】}
+
+% 图片尚未生成时保持可编译；上传图片后按注释替换对应占位框。
+\newcommand{\placeholderbox}[1]{%
+  \fbox{\begin{minipage}[c][5.8cm][c]{0.88\textwidth}
+    \centering\color{framegray}\zihao{-4}#1
+  \end{minipage}}%
+}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{1.6cm}
+  {\heiti\zihao{1} 课程设计报告\par}
+  \vspace{2.2cm}
+  {\heiti\zihao{2} 基于预训练语言模型的\par}
+  \vspace{0.35cm}
+  {\heiti\zihao{2} 简历岗位匹配度评估与面试辅助系统\par}
+  \vfill
+  \renewcommand{\arraystretch}{1.7}
+  \begin{tabular}{>{\heiti}r p{8.5cm}}
+    课程名称： & \coursename \\
+    学院、专业、班级： & \collegeclass \\
+    学号、姓名： & \studentinfo \\
+    指导教师： & \advisorname \\
+    完成日期： & \finishdate \\
+  \end{tabular}
+  \vfill
+\end{titlepage}
+
+\pagenumbering{Roman}
+
+
+\chapter*{中文摘要}
+\addcontentsline{toc}{chapter}{中文摘要}
+
+
+招聘筛选需要从简历和岗位描述（Job Description，JD）中判断候选人的技能与经历是否匹配。传统关键词方法容易漏掉同义表达，也可能因简历堆叠技术名词而高估实际能力。针对这一问题，本项目设计并实现了一套简历岗位匹配度评估与面试辅助系统。系统先通过规则方法将 JD 切分为逐条岗位要求，将简历切分为带章节来源的证据片段，再使用技能词典和同义词规则抽取技能实体；随后调用中文预训练文本嵌入模型 \texttt{\detokenize{BAAI/bge-small-zh-v1.5}}，计算岗位要求与简历证据的余弦相似度并检索 Top-3 证据。系统从技能实体、语义证据、项目经历和软技能四个维度形成综合评分，同时以字符 n-gram TF-IDF 作为传统方法对比基线。生成模块使用 \texttt{\detokenize{Qwen/Qwen2.5-1.5B-Instruct}}，依据结构化分数和证据生成优势、短板、简历建议及面试问题，模型异常时回退到规则模板。六组构造案例覆盖高匹配、跨领域、同义表达和关键词堆叠等场景，实验结果的匹配等级均与预设情形一致。结果表明，该系统能够在保留证据可解释性的同时识别一定程度的语义对应关系，并完成从文件解析、匹配评分到报告导出的完整自然语言处理应用流程。
+
+
+\textbf{关键词：} 预训练语言模型；文本嵌入；语义匹配；简历分析；证据检索
+
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+
+Resume-job matching requires identifying whether a candidate's skills and experience provide sufficient evidence for the requirements stated in a job description. Pure keyword matching may overlook synonymous expressions and may also overestimate a resume that lists technical terms without relevant project experience. To address these problems, this project designs and implements an explainable resume-job matching and interview assistance system. The system first segments the job description into individual requirements and the resume into evidence passages with section information. A categorized skill dictionary is then used to extract matched and missing skills. The pretrained Chinese embedding model \texttt{\detokenize{BAAI/bge-small-zh-v1.5}} encodes job requirements and resume evidence, calculates cosine similarity, and retrieves the Top-3 evidence passages for each requirement. A four-dimensional scoring model combines skill entities, semantic evidence, project experience, and soft skills. Character n-gram TF-IDF is retained as a traditional baseline. Finally, \texttt{\detokenize{Qwen/Qwen2.5-1.5B-Instruct}} converts the structured scores and evidence into strengths, weaknesses, resume suggestions, and interview questions. Experiments on six constructed cases show that the resulting match levels are consistent with the predefined scenarios. The system provides a complete and explainable NLP workflow from document parsing and semantic matching to report generation.
+
+
+\textbf{Keywords:} pretrained language model; text embedding; semantic matching; resume analysis; evidence retrieval
+
+
+\clearpage
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\chapter{绪论}
+
+
+\section{研究背景}
+
+
+随着网络招聘平台和数字化人力资源系统的发展，求职者与岗位之间的信息交换越来越依赖电子简历和岗位描述（Job Description，JD）。一份 JD 往往同时包含岗位职责、技术栈、项目经验、教育背景以及沟通协作等要求，简历则通过技能清单、项目经历、实习经历和教育经历展示候选人的能力。招聘人员需要在较短时间内完成大量文本比较，求职者也希望在投递前判断自己的简历是否真正回应了岗位需求，因此，如何利用自然语言处理技术实现简历与 JD 的自动匹配具有明确的应用价值。
+
+
+简历岗位匹配并不是简单的关键词计数任务。首先，两类文本的组织方式不同：JD 以“要求”为中心，简历以“经历”为中心；其次，相同能力可能具有多种表达方式，例如 JD 中的“向量检索”可能在简历中写成“相似句搜索”，而“文本分类”也可能表现为“意图识别”；再次，简历中出现某个技术名词并不必然意味着候选人具备相应的项目能力。若只统计相同词语，系统容易漏掉同义表达；若直接比较两篇全文，教育信息、个人介绍等非核心内容又会稀释真正重要的岗位要求。
+
+
+基于上述特点，本项目将匹配任务分解为结构切分、技能实体抽取、语义证据检索、多维评分和生成式辅助五个连续环节。系统不仅给出一个综合分数，还尝试回答三个更有价值的问题：岗位要求在简历中是否有对应证据，候选人已经覆盖和仍然缺失哪些能力，以及应如何修改简历并准备后续面试。这样的任务设计能够综合运用文本预处理、信息检索、预训练语言模型、余弦相似度、Prompt 设计和交互式可视化，具有较完整的自然语言处理工程链路。
+
+
+\section{国内外相关方法概述}
+
+
+早期文本匹配通常建立在词袋模型和向量空间模型之上。TF-IDF 根据词项在文档中的频率与区分能力构造稀疏向量，再通过余弦相似度衡量文本的词面接近程度[1]。这类方法计算成本低、结果容易复现，适合充当检索基线，但对同义词、上下文和语序的建模能力有限。在简历场景中，只要两段文本使用了不同术语，即使实际含义相近，TF-IDF 也可能给出较低分数。
+
+
+Transformer 的提出推动了上下文预训练语言模型的发展[2]。Sentence-BERT 通过孪生网络结构将句子编码为可直接比较的稠密向量，大幅降低了大规模句对检索的计算成本[3]。在中文语义检索任务中，BGE 等嵌入模型能够把词面不同但语义接近的文本映射到相近的向量空间，因此更适合建立“岗位要求—简历证据”的局部匹配关系。与全文相似度相比，逐条要求检索还能够保留证据来源，提高结果的可解释性。
+
+
+近年来，生成式大模型开始用于文本总结、问答和内容生成。其优势是能够把结构化分析结果转化为自然、完整且具有针对性的建议，但生成文本可能存在事实扩展、格式不稳定和内容重复等问题。因此，本项目不让生成模型直接决定匹配分数，而是先由可追溯的实体、相似度和规则评分形成稳定结论，再由 Qwen2.5 根据这些结论生成简历优化建议与面试问题。该分层思路兼顾了传统方法的可控性、预训练嵌入的语义能力和生成式模型的表达能力。
+
+
+\section{研究目标与主要工作}
+
+
+本项目的总体目标是设计并实现一套可在个人计算机上运行的简历岗位匹配度评估与面试辅助系统。系统面向课程设计演示和求职者自查场景，输入一份简历与一份岗位 JD，输出综合匹配度、匹配等级、四个维度得分、命中与缺失技能、逐条语义证据、优势与短板、简历优化建议以及面试问题和回答思路。
+
+
+围绕这一目标，本文完成了以下工作。第一，针对简历章节与 JD 要求建立规则化切分方法，将两篇半结构化文档转换为适合检索的证据单元。第二，构建分类技能词典和同义表达映射，分别统计岗位技能、简历技能及其交集和差集。第三，引入中文预训练文本嵌入模型 \texttt{\detokenize{BAAI/bge-small-zh-v1.5}}，对每条岗位要求检索 Top-3 简历证据，并保留证据文本、章节来源和余弦相似度。第四，综合技能实体、语义证据、项目经历和软技能形成四维评分，同时保留字符 n-gram TF-IDF 作为传统方法基线。第五，使用 \texttt{\detokenize{Qwen/Qwen2.5-1.5B-Instruct}} 根据结构化结果生成分析报告，并设计 JSON 解析、格式修复和模板降级机制。最后，通过六组具有不同语义关系的案例验证整体方法。
+
+
+需要说明的是，本项目调用预训练模型进行推理，没有开展模型预训练或领域微调。综合匹配分表示当前评分规则下的文本匹配程度，不等同于录用概率，也不应替代招聘人员的专业判断。系统的定位是提供可解释的辅助信息，帮助用户发现简历与岗位要求之间的对应关系和表达缺口。
+
+
+\section{论文结构}
+
+
+全文共分为六章。第一章介绍研究背景、相关方法和研究目标；第二章完成任务形式化，说明简历与 JD 的结构化处理、证据粒度和技能实体抽取；第三章以 TF-IDF 为传统基线，重点阐述 BGE 文本嵌入、余弦相似度矩阵和 Top-K 语义证据检索；第四章介绍四维匹配评分、Qwen2.5 生成式面试辅助以及证据约束机制；第五章通过六组构造案例分析词面匹配、语义匹配和综合评分的差异，并讨论实验有效性；第六章总结研究成果、现有不足和后续改进方向。运行命令与核心配置放在附录中，正文集中讨论自然语言处理方法和实验结论。
+
+
+\chapter{任务定义与文本预处理}
+
+
+\section{简历岗位匹配任务形式化}
+
+
+给定一份简历文本 \(R\) 和一份岗位描述 \(J\)，系统需要输出匹配分数、匹配等级以及能够解释该结论的结构化信息。与普通文本分类不同，本任务既要判断两篇文档的整体相关程度，又要回答每条岗位要求能否在简历中找到对应证据。因此，本文将 JD 表示为要求集合 \(Q=\{q_1,q_2,\ldots,q_m\}\)，将简历表示为带章节来源的证据集合 \(E=\{e_1,e_2,\ldots,e_n\}\)。核心匹配问题由全文比较转化为 \(m\times n\) 个“要求—证据”文本对的相关性计算。
+
+
+任务输出包含三个层次。第一层是实体层，识别 JD 要求的技术技能和软技能，并计算简历中的命中项与缺失项；第二层是证据层，为每条要求返回 Top-K 简历片段、章节来源、相似度和匹配状态；第三层是决策层，将技能、语义、项目和软技能信息聚合为四维分数、综合分和等级。生成式模型位于决策之后，只负责把这些结构化结果组织为优势、短板、优化建议和面试问题。
+
+
+这一形式化方式强调“文本匹配不等于能力判定”。系统判断的是简历文本是否充分回应 JD，而不是候选人的真实工作能力。某项技能没有写入简历会降低文本匹配度，但不能证明候选人完全不具备该技能；同样，关键词出现也需要项目或经历证据支持，不能直接视为熟练掌握。
+
+
+\section{文档读取、清洗与结构切分}
+
+
+系统首先将不同来源的文件统一转换为纯文本。\texttt{\detokenize{core/file_reader.py}} 对 TXT 依次尝试 UTF-8 BOM、UTF-8、GB18030 和 GBK 编码；DOCX 读取非空段落和表格单元格；PDF 使用 \texttt{\detokenize{pdfplumber}} 提取可选择文本。扫描型 PDF 本质上是图片，当前方法没有集成 OCR，因此这类文件需要先完成文字识别。
+
+
+得到纯文本后，\texttt{\detokenize{normalize_text()}} 统一多余空白和字母大小写，并保留中英文、数字以及常见技术符号。简历和 JD 的结构特点不同，因此采用两套切分策略。\texttt{\detokenize{split_resume_sections()}} 根据教育、技能、项目和实习等标题别名维护当前章节，再按换行和标点将正文切分为证据句；\texttt{\detokenize{split_jd_requirements()}} 识别岗位职责、任职要求、技能要求和加分项等类别，移除序号并形成逐条要求。章节名称会与证据文本一起保存，使后续分析能够判断证据来自项目经历、技能清单还是教育经历。
+
+
+证据粒度会直接影响语义匹配。片段过长时可能包含多个主题，模型给出的相似度难以解释；片段过短时则缺少动作、对象和结果。当前方法以行、句号和分号作为主要边界，并过滤过短片段，在语义完整性和证据可读性之间取得折中。对于复杂排版造成的切分偏差，实验前需要进行人工检查和修正。
+
+
+在完成文本规范化后，可以统计项目内置示例简历和示例 JD 的高频词项。词云有助于观察这一组示例文本在技术词汇和职责描述上的表面差异，但它不包含上下文语义，也不参与综合评分，更不能代表全部实验案例的总体词频分布。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-01.png}
+  \placeholderbox{示例简历与示例岗位 JD 关键词词云对比\\[0.6em]\footnotesize 数据来源：\texttt{\detokenize{data/sample_resume.txt}}、\texttt{\detokenize{data/sample_jd.txt}} 经 \texttt{\detokenize{tokenize_text()}} 处理后的词项；该图只描述这一组示例文本的词面分布，不参与评分。}
+  \caption{示例简历与示例岗位 JD 关键词词云对比}
+  \label{fig:placeholder-1}
+\end{figure}
+
+
+\section{技能实体抽取与归一化}
+
+
+技能抽取由分类词典与别名规则共同完成。\texttt{\detokenize{skill_dict.json}} 将技能划分为编程语言、数据分析、自然语言处理、机器学习、后端开发、工具平台和软技能等类别。系统逐类扫描文本，将不同写法映射到统一技能名称。例如“NLP”与“自然语言处理”、“文本分类”与“意图识别”、“语义匹配”与“相似句检索”通过别名表建立关联。
+
+
+对于英文普通词，系统使用单词边界正则，避免短词误命中更长单词；对于中文技能，使用去空格后的子串匹配；\texttt{C++}、\texttt{C\#}、\texttt{.NET} 和单字母 \texttt{R} 等包含特殊符号或长度较短的技能使用专门规则。完成抽取后，系统分别得到岗位技能集合 \(K_j\) 与简历技能集合 \(K_r\)，命中技能和缺失技能定义为：
+
+
+\begin{equation}
+K_{matched}=K_j\cap K_r,\qquad K_{missing}=K_j-K_r
+\end{equation}
+
+
+技能结果按类别保存。交集反映简历已经明确表达的岗位技能，差集提示需要补充或准备的能力。词典方法具有清晰、稳定和容易解释的优点，但无法自动发现词典外的新技术，因此技能结果还需要与 BGE 语义证据结合，避免把“没有命中规范词”直接等同于“没有相关能力”。
+
+
+为了观察技能词典在内置示例中的覆盖情况，本文将命中和缺失技能按类别统计。分类结果能够指出该组示例的差距集中于编程语言、NLP、数据分析还是软技能，但其有效性受到词典规模和别名规则的限制。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-02.png}
+  \placeholderbox{示例简历与示例岗位 JD 的技能实体覆盖率及分类命中情况\\[0.6em]\footnotesize 数据来源：同一次示例分析的 \texttt{\detokenize{matched_skills_by_category}} 与 \texttt{\detokenize{missing_skills_by_category}}。}
+  \caption{示例简历与示例岗位 JD 的技能实体覆盖率及分类命中情况}
+  \label{fig:placeholder-2}
+\end{figure}
+
+
+\section{中间表示与证据粒度}
+
+
+预处理阶段最终产生四类中间表示：简历章节、简历证据列表、JD 要求列表和分类技能结果。每条简历证据同时保存 \texttt{\detokenize{section}} 与 \texttt{\detokenize{text}}，每条岗位要求保存 \texttt{\detokenize{type}} 与 \texttt{\detokenize{text}}。章节来源使系统能够区分技能清单中的名词和项目经历中的完整描述，也为后续证据展示提供可追溯信息。
+
+
+证据粒度是本任务中的关键设计变量。若把整份简历作为单一文本，最相似内容的位置无法确定；若把文本切得过碎，动作、对象和结果之间的关系会被破坏。当前实现以章节、行和标点为主要边界，优先保留包含完整谓词和技术对象的句子。对简历和 JD 分别切分后再进行匹配，能够减少教育背景、个人介绍等非核心内容对岗位要求的干扰。
+
+
+技能实体与文本证据承担不同角色。实体集合适合判断 Python、SQL、BERT 等明确技术栈是否出现；证据句适合判断候选人是否真正描述了数据清洗、模型训练、指标评估或团队协作等经历。后续算法并行使用两种表示，从而兼顾精确匹配和语义召回。
+
+
+\chapter{基于预训练语言模型的语义匹配方法}
+
+
+\section{TF-IDF 词面匹配基线}
+
+
+当前 \texttt{\detokenize{TfidfVectorizer}} 使用平滑逆文档频率：
+
+
+\begin{equation}
+\operatorname{idf}(t)=\log\frac{1+N}{1+\operatorname{df}(t)}+1,
+\quad
+\operatorname{tfidf}(t,d)=\operatorname{tf}(t,d)\operatorname{idf}(t)
+\end{equation}
+
+
+其中 \(N\) 为文档数，\(\operatorname{df}(t)\) 为包含词项 \(t\) 的文档数。项目使用字符边界 2 至 4 gram，以降低中文分词差异。两个向量的余弦相似度为：
+
+
+\begin{equation}
+\cos(\boldsymbol{x},\boldsymbol{y})=
+\frac{\boldsymbol{x}^{\mathsf T}\boldsymbol{y}}
+{\lVert\boldsymbol{x}\rVert_2\lVert\boldsymbol{y}\rVert_2}
+\end{equation}
+
+
+TF-IDF 的优势是计算速度快、不依赖神经网络权重并且结果容易复现。本文将简历全文与 JD 全文转换为字符 n-gram 向量，得到一个整体词面相似度，作为与预训练语义模型比较的传统基线。其局限也十分明确：当两段文本表达同一含义却使用不同词语时，稀疏向量之间的重叠可能很少；反之，重复堆叠岗位关键词可能提高词面分数，却不能提供真实项目证据。
+
+
+\section{BGE 文本嵌入模型}
+
+
+项目使用 \texttt{\detokenize{BAAI/bge-small-zh-v1.5}} 将要求和证据编码为稠密向量。官方模型卡给出的中文向量维度为 512，参数规模约 24M[4][5]。首选后端为 \texttt{\detokenize{SentenceTransformer.encode()}}；若其失败，则使用 \texttt{\detokenize{AutoTokenizer + AutoModel}}，对最后隐藏层执行 attention-mask mean pooling 并进行 L2 归一化。两个后端的 pooling 方式不同，可能产生不同分数分布，阈值应在固定后端上校准。
+
+
+推理时，系统分别批量编码全部 JD 要求和全部简历证据，再通过矩阵乘法一次得到完整相似度矩阵。与逐对调用模型相比，批量编码减少了重复计算，也便于后续生成热力图。向量归一化后，点积等价于余弦相似度。代码会将相似度限制在合法范围，并在证据结果中保留四位小数，使排序、状态判断和实验记录共享同一数据来源。
+
+
+BGE 输出的稠密向量包含上下文信息，使“意图识别—文本分类”“相似句检索—语义匹配”等表达能够获得比 TF-IDF 更高的相关性。模型本身不直接输出岗位等级，而是提供要求与证据之间的连续相似度。这样既保留预训练模型的语义能力，又把最终评分控制在可解释的算法模块中。
+
+
+\section{岗位要求与简历证据匹配}
+
+
+语义证据匹配的目标是为每条岗位要求找到最相关的简历片段。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-03.png}
+  \placeholderbox{证据匹配流程图\\[0.6em]\footnotesize 请根据正文说明生成并插入对应图片。}
+  \caption{证据匹配流程图}
+  \label{fig:placeholder-3}
+\end{figure}
+
+
+设 JD 有 \(m\) 条要求、简历有 \(n\) 条证据、嵌入维度为 \(d\)，要求矩阵和证据矩阵分别为 \(R\in\mathbb{R}^{m\times d}\) 与 \(E\in\mathbb{R}^{n\times d}\)。归一化后的相似度矩阵为：
+
+
+\begin{equation}
+M=RE^{\mathsf T}
+\end{equation}
+
+
+其中，\(M_{ij}\) 表示第 \(i\) 条岗位要求与第 \(j\) 条简历证据的余弦相似度。系统对矩阵每一行进行降序排序，选取相似度最高的三条证据。最佳分不低于 0.75 时判定为“高度匹配”，不低于 0.55 且低于 0.75 时判定为“部分匹配”，低于 0.55 时判定为“匹配不足”。阈值用于把连续相似度转换为便于阅读的证据状态，不代表概率意义上的置信度。
+
+
+若忽略神经网络内部编码成本，得到向量后构造相似度矩阵的时间复杂度约为 \(O(mnd)\)，空间复杂度约为 \(O(mn)\)。当前单份简历的要求数和证据数较少，该开销可以接受。每行 Top-K 目前通过完整排序获得；在大规模证据库中，可改用部分排序或向量索引，以避免对全部候选证据排序。
+
+
+Top-3 的设置兼顾信息量和结果可读性。只保留一条证据可能因文本切分误差漏掉补充信息，保留过多证据又会增加阅读负担。最终状态由最佳相似度决定，第二、第三条证据主要承担补充解释和人工复核作用。
+
+
+完整要求—证据矩阵适合使用热力图展示。热力图的每一行对应一条 JD 要求，每一列对应一条简历证据，颜色越深表示余弦相似度越高。与只展示综合分相比，该图能够直接呈现每条要求在哪些简历片段上获得支持。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-04.png}
+  \placeholderbox{岗位要求与简历证据语义相似度热力图\\[0.6em]\footnotesize 使用最终一次示例运行的 BGE 原始余弦相似度矩阵，横轴为证据，纵轴为要求。}
+  \caption{岗位要求与简历证据语义相似度热力图}
+  \label{fig:placeholder-4}
+\end{figure}
+
+
+每条要求还会按照最佳证据相似度划分为高度匹配、部分匹配或匹配不足。将三种状态汇总为柱状图，可以观察简历对岗位要求的整体覆盖情况。该统计使用每行最大值，与完整矩阵中全部元素的分布不同。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-05.png}
+  \placeholderbox{岗位要求最佳证据匹配状态分布\\[0.6em]\footnotesize 分档规则：高度匹配 \texttt{\detokenize{>=0.75}}；部分匹配 \texttt{\detokenize{>=0.55 且 <0.75}}；匹配不足 \texttt{\detokenize{<0.55}}。}
+  \caption{岗位要求最佳证据匹配状态分布}
+  \label{fig:placeholder-5}
+\end{figure}
+
+
+系统同时保留字符 2 至 4 gram TF-IDF 全文相似度作为传统基线。TF-IDF 主要反映两篇文本的词面重叠，BGE 语义分则来自逐条岗位要求的最佳证据均值。二者统计对象不同，因此实验中重点比较变化趋势和典型案例，不把分数差直接表述为准确率提升。
+
+
+\section{嵌入空间可视化}
+
+
+高维文本向量难以直接观察，因此系统使用 t-SNE 或主成分分析（Principal Component Analysis，PCA）生成二维分布图。当样本数不少于 10 时采用 t-SNE，否则采用 PCA。t-SNE 侧重保持局部邻域结构，适合观察语义相近的要求和证据是否形成局部聚集；PCA 通过线性投影保留主要方差，在小样本条件下结果更稳定。两种方法都只用于解释和展示，不参与匹配评分，二维距离也不能替代原始高维空间中的余弦相似度[8]。
+
+
+降维图用于辅助观察 JD 要求向量与简历证据向量的局部邻近关系。重新生成图表时必须根据脚本实际进入的分支标注 t-SNE 或 PCA；即使二维点彼此接近，也仍应回到原始 512 维向量的余弦相似度和文本证据进行解释。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-06.png}
+  \placeholderbox{BGE 文本嵌入向量降维分布\\[0.6em]\footnotesize 图中红色三角表示 JD 要求，蓝色圆点表示简历证据；图注注明实际使用的降维算法。}
+  \caption{BGE 文本嵌入向量降维分布}
+  \label{fig:placeholder-6}
+\end{figure}
+
+
+\section{NLP 技术路线分析}
+
+
+系统没有把生成式大模型直接用于打分，而是选择“规则实体 + 文本嵌入 + 经验评分 + 受约束生成”的分层方案。技能词典适合处理必须明确命中的技术栈，BGE 适合识别同义表达和上下文关系，四维评分使每一部分贡献可解释，Qwen 只负责把结构化结果组织为自然语言。该方案牺牲了端到端学习能力，但降低了小样本课程项目中的不可控性，也便于定位错误来自文件解析、实体抽取、相似度还是生成环节。
+
+
+选择小型中文 BGE 和 1.5B Qwen 也与本地部署约束有关。BGE 可以批量编码要求和证据，避免对所有文本对逐一运行交叉编码器；Qwen2.5-1.5B 的资源需求低于大参数模型，同时具备中文指令遵循和 JSON 输出能力。TF-IDF 被保留为可复现基线和故障降级，而不是为了与 BGE 争夺同一评分含义。
+
+
+该路线也符合课程设计的可验证性要求。传统方法、预训练模型和规则评分分别对应清晰的代码模块，可以从输入文本依次追踪到技能实体、相似度矩阵、证据排序和最终分数。相比完全依赖外部大模型 API，本地预训练模型能够明确记录模型名称、推理模式和结构化输出，更适合展示自然语言处理方法本身。
+
+
+从信息流角度看，本文的方法可以概括为“规则获得结构、词典获得实体、BGE 获得语义证据、评分模型聚合结果”。规则和词典处理边界清楚的语言现象，预训练嵌入处理同义表达与上下文关系，两者的输出在评分阶段汇合。该组合比单纯全文相似度更容易解释，也比直接让生成式大模型打分更加稳定。
+
+
+\chapter{多维评分与生成式面试辅助}
+
+
+\section{多维匹配评分模型}
+
+
+单一相似度无法完整描述岗位匹配情况。为兼顾明确技能、上下文证据、项目实践和沟通协作，系统设计技能实体匹配、语义证据匹配、项目经历匹配和软技能匹配四个维度。技能分为 JD 硬技能被覆盖的比例；语义分为各要求最佳证据相似度的均值；项目分取项目文本与 JD 的语义相似度和项目术语覆盖率中的较大值；软技能分为 JD 软技能覆盖比例。综合公式为：
+
+
+\begin{equation}
+S=0.30S_{skill}+0.40S_{semantic}+0.20S_{project}+0.10S_{soft}
+\end{equation}
+
+
+若 JD 未列某类技能，对应比例分默认 60；没有项目章节但全文含“参与、负责、开发、评估、处理”等行为词时使用全文，否则项目分为 40。默认分表示当前文本在该维度上的信息不足，不等同于候选人的真实能力。加权和执行 \texttt{\detokenize{round()}}，因此综合分以整数值展示。\texttt{\detokenize{S>=85}} 为高度匹配，\texttt{\detokenize{S>=70}} 为较高匹配，\texttt{\detokenize{S>=50}} 为一般匹配，其余为匹配度较低。
+
+
+四维设计体现了项目对不同信息来源的区分。语义证据权重为 40\%，用于强调岗位要求是否能在简历中找到对应经历；技能实体权重为 30\%，保证明确技术栈不会被完全忽略；项目经历权重为 20\%，抑制只罗列技能名但没有实践内容的情况；软技能权重为 10\%，用于补充沟通、协作和文档能力。当前权重具有可解释性，但尚未通过标注数据证明最优。
+
+
+当前权重和阈值具有清晰的业务含义，但属于经验设置。建立规模更大的人工标注数据后，可以采用缺失掩码对可用维度重新归一化权重，并通过敏感性分析校准等级边界。
+
+
+四维雷达图可以展示单个案例的匹配轮廓。例如技能实体分较高而语义证据分较低，说明简历列出了相关技术，但项目描述与岗位职责之间仍缺少足够具体的对应证据。雷达图必须使用同一次运行产生的四维分和综合分，避免不同模型后端的数据混用。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-07.png}
+  \placeholderbox{示例简历四维匹配能力雷达图\\[0.6em]\footnotesize 数据来源：同一次示例运行的 \texttt{\detokenize{dimension_scores}}、\texttt{\detokenize{total_score}} 和 \texttt{\detokenize{match_level}}。}
+  \caption{示例简历四维匹配能力雷达图}
+  \label{fig:placeholder-7}
+\end{figure}
+
+
+\section{Qwen2.5 与结构化生成}
+
+
+生成模型为 \texttt{\detokenize{Qwen/Qwen2.5-1.5B-Instruct}}，属于指令型因果语言模型[6][7]。Prompt 包含简历/JD 摘要、四维评分、命中和缺失技能及压缩证据，要求输出优势、短板、建议、面试问题和最终建议五类 JSON 字段。系统关闭随机采样，并通过代码围栏清理、平衡 JSON 抽取、二次修复和模板补全提高稳定性。Qwen 不参与评分，加载或推理失败时使用规则模板。
+
+
+Prompt 采用“任务说明—输出 Schema—证据数据”的组织方式。任务说明限制模型只能依据给定信息；Schema 规定字段名称和面试问题结构；证据数据则包含相似度、匹配状态和最佳简历片段。相比只输入原始简历与 JD，这种方式减少了模型自行推断评分规则的空间，也使生成文本能够围绕系统已经计算出的优势和缺口展开。
+
+
+结构化输出并不能完全消除幻觉。模型仍可能把相似证据扩展为简历中没有出现的业绩，或者生成与缺失技能无关的问题。因此，项目通过确定性解码降低随机波动，并保留 \texttt{\detokenize{raw_text}}、生成模式和错误信息。更严格的方案应要求每条结论返回对应证据编号，再检查结论所引用的证据是否确实存在于输入结构中。
+
+
+\section{生成式分析流程}
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-08.png}
+  \placeholderbox{生成式分析流程图\\[0.6em]\footnotesize 请根据正文说明生成并插入对应图片。}
+  \caption{生成式分析流程图}
+  \label{fig:placeholder-8}
+\end{figure}
+
+
+数值评分与技能差距适合精确计算，但求职者还需要能够直接理解和执行的自然语言建议。系统使用 Qwen2.5-1.5B-Instruct 生成优势分析、短板分析、简历优化建议、面试问题和最终建议。生成模型的输入不是未经处理的完整文档，而是简历与 JD 摘要、四维分数、命中和缺失技能以及最多六条代表性证据。
+
+
+Prompt 采用“角色与任务—事实约束—输出 Schema—结构化证据”的组织方式。角色与任务要求模型以招聘分析助手的身份输出针对性建议；事实约束强调不得虚构简历中不存在的经历；Schema 规定优势、短板、建议、问题和回答思路等字段；结构化证据为每项结论提供可引用的信息。推理关闭随机采样，以减少同一输入多次分析时的文本波动。
+
+
+模型返回后，解析器首先尝试对完整内容执行 \texttt{\detokenize{json.loads()}}。若输出在 JSON 前后包含解释文字，程序会定位第一个左大括号并寻找配平的 JSON 对象；首次解析仍失败时，系统构造修复 Prompt，请求模型只返回合法 JSON。列表字段和面试问题字段随后被规范为统一结构，便于分别评价字段完整率和内容质量。
+
+
+如果生成模型无法加载或输出多次解析失败，系统使用规则模板，根据命中技能、缺失技能、弱证据要求和综合分生成基础内容。模板降级保证了功能完整性，但不等同于 Qwen 推理。系统在结果中保存生成模式和错误状态，使使用者能够区分预训练模型输出与模板输出。通过这种方式，开放式文本生成被限制在可验证的评分和证据之后，不会改变核心匹配结论。
+
+
+\section{证据约束与结果可解释性}
+
+
+系统的可解释性来自算法中间结果，而不是在最终分数后附加一段笼统说明。技能维度可以追溯到岗位技能集合与简历技能集合的交集和差集；语义维度可以追溯到每条要求的最佳证据及其相似度；项目维度可以追溯到项目章节和项目行为词；软技能维度可以追溯到沟通、协作和文档等实体。综合分因此能够被分解和复核。
+
+
+生成式分析同样受到证据边界约束。Prompt 只提供已经抽取的技能、分数和代表性证据，并明确要求模型不得虚构经历。结果中保留原始生成文本、解析后的结构和实际生成模式。当 Qwen 不可用时，模板根据同一批结构化信息生成基础建议，保证评分链路不受生成模块影响。
+
+
+这种设计使系统能够区分“算法事实”和“语言表达”。分数、技能差距和证据相似度属于可重复计算的结果；优势总结、修改建议和回答思路属于对结果的自然语言组织。使用者应优先检查前者，再把后者作为简历修改与面试准备的辅助，而不能仅凭生成文本作出招聘决策。
+
+
+\chapter{实验设计与结果分析}
+
+
+\section{实验任务、数据与评价方式}
+
+
+本章把实验划分为三个相互独立的评价任务。第一项评价四维评分能否在预设场景中形成合理的综合分和匹配等级；第二项评价 TF-IDF 与 BGE 对词面重叠、同义表达和证据不足等现象的响应差异，并进一步使用同口径的要求—证据检索指标比较排序能力；第三项评价 Qwen 输出的 JSON 有效性、字段完整性以及生成内容的证据一致性和可执行性。匹配评分和生成质量分别评价，避免用语言流畅度替代匹配正确性。
+
+
+\texttt{\detokenize{data/eval_cases.json}} 包含六组人工构造的简历—JD 配对样例，覆盖高匹配、相近领域、跨领域、明显低匹配、同义表达和关键词堆叠等场景。样例不是公开数据集，也不含真实个人信息。六组数据主要承担探索性的机制验证，不构成真实招聘准确率测试集。由于缺少规模化独立标注数据，本实验不报告具有泛化含义的准确率、召回率和 F1，而采用预期等级一致性、排序合理性、典型案例分析和生成质量人工评价。
+
+
+六组样例在构造时分别控制岗位领域、技能覆盖和项目证据。高匹配样例同时包含 Python、SQL、NLP 任务、模型评估和协作能力；较高匹配样例强调数据清洗和文本准备，但缺少较深入算法经验；一般和低匹配样例用于观察跨岗位迁移与明显领域差异；最后两组边界样例专门比较“词面不同但语义接近”和“关键词相同但证据不足”。这种设计不能代替真实数据集，但能够覆盖系统最需要验证的行为。
+
+
+
+\begin{table}[H]
+  \centering
+  \caption{六组实验案例设计}
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+    \toprule
+    案例 & 测试重点 & 预期等级 \\
+    \midrule
+    NLP项目简历 → NLP实习岗位 & 高匹配场景 & 高度匹配 \\
+    数据清洗简历 → AI数据处理岗位 & 相近领域匹配 & 较高匹配 \\
+    后端开发简历 → NLP实习岗位 & 跨领域迁移 & 一般匹配 \\
+    市场运营简历 → NLP算法岗位 & 明显低匹配 & 匹配度较低 \\
+    意图识别项目简历 → NLP语义匹配岗位 & 同义表达识别 & 较高匹配 \\
+    关键词罗列简历 → NLP项目岗位 & 关键词堆叠抑制 & 一般匹配 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+
+实验脚本对每组文本调用 \texttt{\detokenize{calculate_match()}}，统一记录 TF-IDF 基线、BGE 语义证据分、四维综合分、匹配等级和语义后端。预期等级在运行前写入数据文件，避免根据输出反向调整预期。数值评分实验不调用生成模型，从而排除生成速度和文本格式波动对评分结果的影响；随后在相同六组结构化输入上单独运行 Qwen，统计原始解析、JSON 修复、字段规范化和模板降级状态。该设置使评分误差与生成格式误差能够分别定位。
+
+
+\section{综合匹配与等级结果}
+
+
+
+\begin{table}[H]
+  \centering
+  \caption{六组样例验证结果}
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+    \toprule
+    案例 & TF-IDF & BGE语义分 & 综合分 & 实际等级 \\
+    \midrule
+    NLP项目简历 → NLP实习岗位 & 24.45 & 73.95 & 86 & 高度匹配 \\
+    数据清洗简历 → AI数据处理岗位 & 19.45 & 85.76 & 83 & 较高匹配 \\
+    后端开发简历 → NLP实习岗位 & 8.04 & 63.19 & 50 & 一般匹配 \\
+    市场运营简历 → NLP算法岗位 & 1.86 & 54.75 & 40 & 匹配度较低 \\
+    意图识别项目简历 → NLP语义匹配岗位 & 2.40 & 64.85 & 70 & 较高匹配 \\
+    关键词罗列简历 → NLP项目岗位 & 12.93 & 71.55 & 64 & 一般匹配 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+
+TF-IDF 基线与 BGE 语义证据分可以用于观察传统词面方法和预训练文本嵌入对不同案例的响应，但二者不能进行绝对数值上的性能比较。TF-IDF 统计简历全文与 JD 全文的字符 n-gram 重叠，BGE 语义分则聚合逐条岗位要求的最佳简历证据。图中并列展示两组分数只用于案例内的现象分析，不比较柱高差值，也不把差值解释为模型准确率提升。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-09.png}
+  \placeholderbox{六组案例中 TF-IDF 词面相似度与 BGE 语义证据分\\[0.6em]\footnotesize 两组分数统计口径不同，图内须标注“仅比较案例响应，不比较绝对柱高”。}
+  \caption{六组案例中 TF-IDF 词面相似度与 BGE 语义证据分}
+  \label{fig:placeholder-9}
+\end{figure}
+
+
+六组综合分能够更直接地呈现系统对不同匹配程度的排序。绘图时按照表5-2的案例顺序，并标出 50、70 和 85 三条等级边界，使分数与等级之间的关系清楚可见。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-10.png}
+  \placeholderbox{不同实验样例综合匹配得分对比\\[0.6em]\footnotesize 综合分依次为 \texttt{\detokenize{86、83、50、40、70、64}}，图中同时标注实际匹配等级。}
+  \caption{不同实验样例综合匹配得分对比}
+  \label{fig:placeholder-10}
+\end{figure}
+
+
+六组案例均使用 \texttt{\detokenize{pretrained_embedding}} 模式，实际等级与实验前设定的预期等级一致。高匹配和较高匹配案例位于 70 分以上，明显跨领域的市场运营案例为 40 分，两个边界案例也表现出不同的匹配特征。六组样例验证了评分机制在预设场景下的基本合理性，但样本数量较少且由项目成员构造，尚不能代表真实招聘数据上的泛化性能。
+
+
+\section{语义响应差异与典型案例}
+
+
+“意图识别项目简历 → NLP语义匹配岗位”样例中，TF-IDF 为 2.40，BGE 语义分为 64.85。简历使用“意图识别、向量化表示、相似句检索”，JD 使用“文本分类、语义匹配、向量检索”，该案例体现了稠密文本嵌入识别同义表达的能力。
+
+
+“关键词罗列简历 → NLP项目岗位”样例虽然出现 Python、NLP 等词，但缺少完整项目证据，最终综合分为 64，只达到一般匹配。四维评分对关键词堆叠形成了一定约束。“后端开发简历 → NLP实习岗位”样例恰好为 50 分，说明结果对默认分、词典和阈值较敏感，应在后续实验中重点验证。
+
+
+TF-IDF 是全文字符 n-gram 相似度，BGE 分数是逐条要求最佳证据的均值，两者定义不同。为形成同口径比较，本实验进一步把两种方法统一用于“给定一条岗位要求，从同一组简历证据中检索相关句子”的排序任务。项目成员先为每条岗位要求标注能够直接或间接提供支持的证据句，再分别记录两种方法的首位命中率、前三位召回率和平均倒数排名。设共有 (N) 条岗位要求，第 (i) 条要求的首个相关证据排名为 (r_i)，评价指标定义为：
+
+
+\begin{equation}
+\mathrm{Recall@}k=\frac{1}{N}\sum_{i=1}^{N}\mathbb{I}(r_i\leq k),\qquad
+\mathrm{MRR}=\frac{1}{N}\sum_{i=1}^{N}\frac{1}{r_i}.
+\end{equation}
+
+
+该实验直接评价证据排序能力，因此 TF-IDF 与 BGE 使用相同候选证据、相同人工标注和相同指标。它能够回答预训练文本嵌入是否更容易把语义相关证据排在前列，而不会把两个定义不同的原始分数误写成准确率提升。
+
+
+\begin{figure}[H]
+  \centering
+  % 完成证据标注并运行检索实验后，将下行替换为对应图片
+  \placeholderbox{TF-IDF 与 BGE 证据检索性能对比\\[0.6em]\footnotesize 横轴为 Recall@1、Recall@3 和 MRR，纵轴为 0 至 1；每项使用两根柱并标注实测值。}
+  \caption{TF-IDF 与 BGE 在岗位要求—简历证据检索任务上的性能对比}
+  \label{fig:retrieval-metrics}
+\end{figure}
+
+
+除每条要求的最佳分外，还可以统计示例中完整要求—证据矩阵的全部相似度。该分布包含大量并非最佳证据的文本对，能够观察语义模型的背景分数范围，并为 0.55 和 0.75 两个阈值是否合理提供直观参考。分布均值不能代替逐要求最佳分，也不能直接用于判断综合匹配等级。
+
+
+\begin{figure}[H]
+  \centering
+  % 上传图片后，可替换下一行为：\includegraphics[width=0.88\textwidth]{figures/figure-11.png}
+  \placeholderbox{全部岗位要求与简历证据余弦相似度分布\\[0.6em]\footnotesize 统计完整相似度矩阵全部元素，标注矩阵均值、0.55 和 0.75；图注不得写成“最佳相似度分布”。}
+  \caption{全部岗位要求与简历证据余弦相似度分布}
+  \label{fig:placeholder-11}
+\end{figure}
+
+
+高匹配样例综合分为 86，说明技能、证据和软技能共同达到较高水平；数据处理样例虽然 BGE 语义分达到 85.76，但综合分为 83，没有进入高度匹配，反映其他维度对总分形成约束。市场运营样例的 TF-IDF 仅为 1.86，综合分为 40，系统能够识别明显跨领域文本。六组综合分整体顺序符合预设难度，但后端样例刚好位于 50 分边界，表明等级对小幅分数变化较敏感。
+
+
+项目还可以通过去除单个评分维度后重新归一化来观察权重敏感性。这类分析只改变评分组合，不改变模型和输入特征，因此属于评分机制分析，而不是严格的模型消融实验。若后续开展消融，应分别关闭技能别名、BGE 语义维度和项目维度，并在固定数据上重新计算全部案例，比较排序和等级变化。
+
+
+\section{生成式分析的结构化有效性}
+
+
+匹配分数只能说明简历与岗位之间的结构化关系，不能直接证明面试辅助文本是否稳定可用。因此，本实验在相同六组案例上单独运行 Qwen 生成模块，并把输出处理过程划分为四种状态：原始 JSON 直接解析成功、首次解析失败但修复成功、修复失败后完成字段规范化，以及模型不可用或输出无效时进入规则模板。每次运行均保存原始文本、解析状态、生成模式和最终结构化结果。
+
+
+结构化有效性从“模型原始输出”和“系统最终交付”两个层面统计。设测试案例数为 (N)，能够被 \texttt{json.loads()} 直接解析的原始输出数为 (N_{json})，五个必需字段中实际返回的非空字段总数为 (F_{raw})，则原始 JSON 直接解析率和原始字段完整率分别为：
+
+
+\begin{equation}
+P_{json}=\frac{N_{json}}{N},\qquad
+C_{raw}=\frac{F_{raw}}{5N}.
+\end{equation}
+
+
+五个必需字段包括优势、短板、简历优化建议、面试问题和最终建议；面试问题内部还需包含问题类型、问题文本和回答思路。由于字段规范化和规则模板会补全缺失内容，最终字段完整率用于衡量系统鲁棒性，原始字段完整率才用于反映 Qwen 的结构化指令遵循能力。即使最终完整率达到 100\%，也不能将其表述为生成模型准确率达到 100\%。
+
+
+\begin{table}[H]
+  \centering
+  \caption{生成式分析结构有效性的评价指标}
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}X}
+    \toprule
+    指标 & 判定方式 \\
+    \midrule
+    原始 JSON 直接解析率 & Qwen 首次输出可直接由 JSON 解析器读取的案例比例 \\
+    原始字段完整率 & 修复和模板补全前，五个必需字段中非空字段的比例 \\
+    JSON 修复成功率 & 首次解析失败的输出中，经修复 Prompt 后成功解析的比例 \\
+    最终结构化成功率 & 经过解析、修复与规范化后满足输出 Schema 的案例比例 \\
+    模板降级比例 & 因模型不可用或输出无效而使用规则模板的案例比例 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+
+\begin{figure}[H]
+  \centering
+  % 完成六组 Qwen 运行并统计状态后，将下行替换为对应图片
+  \placeholderbox{Qwen 结构化输出有效性统计\\[0.6em]\footnotesize 展示直接解析成功、修复后成功、规范化补全和模板降级的案例数量，并标注原始字段完整率与最终结构化成功率。}
+  \caption{Qwen 结构化生成结果的解析与降级状态}
+  \label{fig:generation-validity}
+\end{figure}
+
+
+该图需要根据同一次实验保存的生成日志绘制，并在图注中注明模型名称、生成模式和案例数量。若某次运行进入模板降级，应如实计入而不能从样本中删除。通过同时报告原始成功率与最终成功率，可以区分预训练模型自身的格式稳定性和程序修复机制提供的系统鲁棒性。
+
+
+\section{生成内容人工评价与案例展示}
+
+
+JSON 合法并不意味着内容具有实际价值。为评价 Qwen 是否比固定规则模板生成更有针对性的面试辅助文本，本实验在相同结构化输入下分别生成 Qwen 版本和模板版本，删除模型名称并随机编号后交由三名项目成员独立评分。评阅者不能查看文本来源，但可以查看对应的命中技能、缺失技能和语义证据，以判断结论是否受到输入事实支持。
+
+
+人工评价采用五级量表，从证据一致性、岗位相关性、建议可执行性和语言清晰度四个维度评分。1 分表示存在明显错误或基本不可用，3 分表示内容基本合理但较为笼统，5 分表示结论有充分证据、与岗位高度相关且能够直接用于简历修改或面试准备。最终报告每个维度的平均值和标准差；若评阅者之间分歧明显，还应结合具体案例解释，而不能只报告平均分。
+
+
+\begin{table}[H]
+  \centering
+  \caption{生成内容人工评价量表}
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}X}
+    \toprule
+    评价维度 & 评分依据 \\
+    \midrule
+    证据一致性 & 优势、短板和建议是否能够在技能差距或简历证据中找到依据，是否存在经历虚构 \\
+    岗位相关性 & 内容是否针对当前 JD 的职责和技能要求，而不是可用于任意岗位的通用套话 \\
+    建议可执行性 & 建议是否给出可落实的修改方向、补充内容或面试准备步骤 \\
+    语言清晰度 & 表达是否准确、简洁、有条理，问题与回答思路是否容易理解 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+
+\begin{figure}[H]
+  \centering
+  % 完成三人盲评并汇总均值和标准差后，将下行替换为对应图片
+  \placeholderbox{Qwen 与规则模板的人工盲评结果\\[0.6em]\footnotesize 横轴为四个评价维度，纵轴为 1 至 5 分；使用并列柱状图展示均值，并使用误差线表示标准差。}
+  \caption{Qwen 输出与规则模板输出的人工评价对比}
+  \label{fig:generation-human-rating}
+\end{figure}
+
+
+定量评分之外，报告选择“意图识别项目简历—NLP 语义匹配岗位”作为生成案例。该案例的简历与 JD 在词面上差异较大，但包含意图识别与文本分类、相似句检索与语义匹配等语义对应关系，适合检查生成模块能否同时利用命中技能、缺失技能和代表性证据。案例展示应保留实际生成模式，并给出至少两条优势、两条短板、两条优化建议以及三类面试问题和回答思路。
+
+
+\begin{figure}[H]
+  \centering
+  % 从 Streamlit 结果页或导出的 JSON 报告制作清晰截图后替换下行
+  \placeholderbox{生成式面试辅助案例展示\\[0.6em]\footnotesize 使用“意图识别项目简历—NLP 语义匹配岗位”的真实输出，展示优势、短板、优化建议、面试问题及回答思路，并注明生成模式。}
+  \caption{语义匹配案例的生成式分析结果}
+  \label{fig:generation-case}
+\end{figure}
+
+
+案例分析时需要逐项回到结构化输入核查。例如，优势应对应命中技能或高相似度证据，短板应对应缺失技能或弱证据要求，优化建议应围绕任务、方法和结果补充可验证信息，面试问题则应覆盖基础技术、项目深挖和岗位匹配三类。若生成文本出现输入中不存在的项目成果，应判定为证据一致性错误，而不能因为表述流畅而给予高分。
+
+
+\section{实验误差、有效性与复现要求}
+
+
+实验的内部有效性主要受代码版本、模型后端和阈值影响。Sentence-Transformers 与 Transformers mean pooling 可能产生不同相似度，图表若来自不同版本就会出现总分不一致。因此复现实验必须记录 Git 提交、模型标识、加载模式、Python 环境和完整四维原始结果，并在同一次运行中生成表格与图片。
+
+
+外部有效性受样例规模和构造方式限制。六组样例覆盖了预先设计的边界场景，但没有反映真实简历中的排版噪声、岗位类别差异和标注者分歧。结论只能说明系统在当前案例上的排序和等级基本合理。构念有效性方面，技能出现、语义相似和真实胜任力并不等价，因此综合分不应被解释为录用概率。后续应在匿名化真实数据上扩大样本，并由不参与系统开发的评阅者独立标注。
+
+
+为了保证图表与表格一致，数值保存和绘图应共享同一个结构化结果文件，而不是在可视化脚本中再次调用模型。每组案例需要保存四维原始分、Top-K 证据、模型状态和运行时间，再由独立绘图脚本读取。这样既能避免模型后端变化造成图表漂移，也能复核每个图的统计口径。
+
+
+生成式实验同样存在主观性风险。三名评阅者均来自项目组，即使采用盲评，也只能降低对模型来源的偏好，不能完全消除对案例和系统设计的先验了解。人工评分应同时报告均值和离散程度，并保留分歧较大的文本进行误差分析。后续若由招聘人员或课程教师进行外部复评，结论会更具可信度。
+
+
+结构修复和模板补全还可能掩盖 Qwen 原始输出的不稳定性。因此实验必须分别报告原始 JSON 直接解析率、修复成功率、最终结构化成功率和模板降级比例，不能只展示最终页面中的完整字段。Qwen 与模板的人工对照也不改变四维匹配分，其目的只是判断生成模型是否提高了报告的针对性和可执行性。
+
+
+\chapter{总结与展望}
+
+
+\section{工作总结}
+
+
+本文围绕简历与岗位描述之间存在结构差异、同义表达和证据不足等问题，设计并实现了一套基于预训练语言模型的简历岗位匹配度评估与面试辅助系统。系统首先将简历和 JD 转换为结构化章节、岗位要求和证据句，再通过分类技能词典计算技能交集与差集；随后使用 BGE-small-zh-v1.5 对逐条岗位要求与简历证据进行语义编码，构造余弦相似度矩阵并检索 Top-3 证据；在此基础上，从技能实体、语义证据、项目经历和软技能四个维度形成综合得分与匹配等级；最后，Qwen2.5-1.5B-Instruct 根据结构化结果生成优势、短板、简历建议和面试问题。
+
+
+与单一关键词匹配相比，本系统的核心特点是把“出现了哪些技能”和“是否存在相关经历证据”结合起来。技能词典保证明确技术栈可以被稳定识别，BGE 负责发现词面不同但含义相近的要求与经历，四维评分说明各类信息对综合结果的贡献，Top-3 证据则使每条要求都可以回到原始简历片段进行复核。生成式模型只负责组织自然语言，不参与数值评分，从架构上减少了生成随机性对核心结论的影响。
+
+
+在方法验证方面，六组构造案例覆盖高匹配、跨领域、同义表达和关键词堆叠等情形，实验结果的等级排序与预设场景一致。TF-IDF 与 BGE 的对比展示了词面重叠和上下文语义之间的差别，四维评分则对只出现关键词而缺少项目证据的情况形成约束。实验说明本文完成了从文本结构化、技能抽取、语义检索、多维评分到受约束生成的完整 NLP 流程。
+
+
+\section{现有不足}
+
+
+本项目仍然存在若干限制。首先，实验样例数量较少且主要由人工构造，无法充分反映真实简历中的排版噪声、岗位类别差异和标注者分歧。其次，技能抽取依赖预先维护的词典和同义词映射，新技术或非常规表达可能无法识别。再次，四维权重、默认分和等级阈值依据任务理解进行设置，尚未在规模化标注数据上完成统计校准。
+
+
+BGE 模型虽然具有较好的通用中文语义能力，但没有针对招聘领域进行微调。岗位职责中的“熟悉”“掌握”“负责”等能力程度词，也尚未被建模为独立特征。Qwen2.5 的生成内容受到 Prompt 截断和模型规模限制，仍可能出现建议重复、证据引用不充分或结构化输出失败。扫描型 PDF、复杂双栏简历和图片化表格也超出了当前文件解析模块的处理范围。
+
+
+此外，文本匹配程度与真实工作胜任力并不等价。教育背景、项目结果和技术关键词只能反映候选人自述文本，无法验证经历真实性，也可能受到表达能力、模板风格和语言习惯影响。因此，系统结果只能用于简历自查、岗位比较和面试准备，不适合自动淘汰候选人。涉及真实简历时，还必须重视个人信息保护、公平性和人工复核。
+
+
+\section{后续展望}
+
+
+后续工作可以从数据、算法、生成和工程四个方向展开。在数据方面，可建立经过匿名化处理的简历—JD 配对数据集，由多名标注者分别给出整体等级、技能命中和证据对应关系，并计算标注一致性。在此基础上，可以对四维权重、证据阈值和等级边界开展敏感性分析，使评分规则从经验设置逐步转向数据驱动校准。
+
+
+在算法方面，可以按岗位领域维护版本化技能词典，并利用语义模型推荐候选新词后进行人工审核；可以收集岗位要求与简历证据的正负文本对，对嵌入模型进行对比学习；也可以在 BGE 召回 Top-K 后增加交叉编码器或 reranker，对语义接近但实际关系较弱的证据进行二阶段重排。对于长简历，可采用章节级分块、滑动窗口和分层摘要，减少固定长度截断造成的信息损失。
+
+
+在生成方面，可以要求每条优势、短板和建议返回对应证据 ID，再使用程序检查引用是否存在；通过 JSON Schema 约束字段类型和数量，并增加事实一致性验证；还可以在相同结构化输入下对比 Qwen 与模板输出，由评阅者从证据一致性、相关性、可执行性和语言清晰度等方面进行盲评。
+
+
+在实验复现方面，应为章节切分、技能别名、评分边界和 JSON 修复补充自动化测试，并保存统一的模型配置、语义后端、随机种子和结构化结果，使表格与图表由同一份数据生成。通过这些改进，本文方法可以从课程设计原型逐步发展为更加可靠、可复现的智能求职辅助方法。
+
+
+\chapter*{参考文献}
+\addcontentsline{toc}{chapter}{参考文献}
+
+
+\noindent [1] MANNING C D, RAGHAVAN P, SCHÜTZE H. \emph{Introduction to Information Retrieval}[M]. Cambridge: Cambridge University Press, 2008. DOI: 10.1017/CBO9780511809071.\par
+
+\noindent [2] VASWANI A, SHAZEER N, PARMAR N, et al. Attention Is All You Need[EB/OL]. arXiv:1706.03762, 2017. \url{https://arxiv.org/abs/1706.03762}.\par
+
+\noindent [3] REIMERS N, GUREVYCH I. Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks[C]//EMNLP-IJCNLP. 2019. \url{https://arxiv.org/abs/1908.10084}.\par
+
+\noindent [4] XIAO S, LIU Z, ZHANG P, et al. C-Pack: Packed Resources For General Chinese Embeddings[C]//SIGIR. 2024. \url{https://arxiv.org/abs/2309.07597}.\par
+
+\noindent [5] BAAI. BAAI/bge-small-zh-v1.5 Model Card[EB/OL]. \url{https://huggingface.co/BAAI/bge-small-zh-v1.5}.\par
+
+\noindent [6] QWEN, YANG A, YANG B, et al. Qwen2.5 Technical Report[EB/OL]. arXiv:2412.15115, 2024. \url{https://arxiv.org/abs/2412.15115}.\par
+
+\noindent [7] QWEN. Qwen/Qwen2.5-1.5B-Instruct Model Card[EB/OL]. \url{https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct}.\par
+
+\noindent [8] VAN DER MAATEN L, HINTON G. Visualizing Data using t-SNE[J]. \emph{Journal of Machine Learning Research}, 2008, 9: 2579-2605.\par
+
+\appendix
+\titleformat{\chapter}{\centering\heiti\zihao{3}}{附录\thechapter}{1em}{}
+
+
+\chapter{运行命令}
+
+
+\begin{lstlisting}
+cd C:\Users\25138\project\RJMN\resume_jd_matcher
+.\myenv\Scripts\activate
+pip install -r requirements.txt
+python -m streamlit run app.py
+\end{lstlisting}
+
+
+\chapter{核心配置}
+
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+    \toprule
+    配置 & 当前值 \\
+    \midrule
+    嵌入模型 & \texttt{\detokenize{BAAI/bge-small-zh-v1.5}} \\
+    生成模型 & \texttt{\detokenize{Qwen/Qwen2.5-1.5B-Instruct}} \\
+    Top-K & 3 \\
+    证据阈值 & 0.55、0.75 \\
+    四维权重 & 30\%、40\%、20\%、10\% \\
+    等级边界 & 50、70、85 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+
+\chapter{团队分工}
+
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+    \toprule
+    成员 & 学号 & 负责内容 & 主要文件 \\
+    \midrule
+    【成员1】 & 【待填写】 & 【待填写】 & 【待填写】 \\
+    【成员2】 & 【待填写】 & 【待填写】 & 【待填写】 \\
+    【成员3】 & 【待填写】 & 【待填写】 & 【待填写】 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\end{document}
